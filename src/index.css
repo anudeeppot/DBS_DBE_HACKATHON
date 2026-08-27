@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cr-bg: #F8FAFC;
+  --color-cr-surface: #FFFFFF;
+  --color-cr-text: #334155;
+  --color-cr-muted: #94A3B8;
+  --color-cr-red: #F47174;
+  --color-cr-red-dark: #E05A5D;
+  --color-cr-yellow: #FDE047;
+  --color-cr-gray: #F1F5F9;
+  --color-cr-border: #E2E8F0;
+  --color-cr-dark: #1E293B;
+
+  --font-sans: "Plus Jakarta Sans", Manrope, Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Menlo, monospace;
+}
+
+:root {
+  --cr-bg: #F8FAFC;
+  --cr-surface: #FFFFFF;
+  --cr-text: #334155;
+  --cr-muted: #94A3B8;
+  --cr-red: #F47174;
+  --cr-red-dark: #E05A5D;
+  --cr-yellow: #FDE047;
+  --cr-gray: #F1F5F9;
+  --cr-border: #E2E8F0;
+}
+
+@layer base {
+  body {
+    background-color: var(--cr-bg);
+    color: var(--cr-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.02em;
+    color: #1E293B;
+  }
+
+  /* Beautiful subtle text selection */
+  ::selection {
+    background-color: rgba(244, 113, 116, 0.2); /* very light cr-red */
+    color: #1E293B;
+  }
+}
+
+/* Enhanced Floating Scrollbars */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+  border: 4px solid var(--cr-bg); /* Creates the "floating inset" padding effect */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Refined Industrial Grid with a subtle fade-out mask */
+.bg-industrial-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0.05) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0.05) 100%);
+}
+
+.bg-industrial-dots {
+  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+}
+
+/* Glassmorphism utility for floating elements */
+.cr-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Enhanced Cards with richer slate-tinted shadows and smoother lifting */
+.cr-card {
+  background-color: var(--cr-surface);
+  border: 1px solid var(--cr-border);
+  border-radius: 12px;
+  /* Use slate tinted shadows instead of pure black for richness */
+  box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.03), 0 2px 4px -2px rgba(15, 23, 42, 0.02);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cr-card-hover:hover {
+  border-color: rgba(244, 113, 116, 0.4);
+  box-shadow: 0 16px 32px -4px rgba(15, 23, 42, 0.06), 0 8px 16px -4px rgba(15, 23, 42, 0.04);
+  transform: translateY(-3px);
+}
+
+/* Enhanced Leaflet Map styling */
+.leaflet-container {
+  font-family: inherit !important;
+  background: #F1F5F9 !important;
+  border-radius: 12px;
+  border: 1px solid var(--cr-border);
+}
+.leaflet-popup-content-wrapper {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  color: #334155 !important;
+  border-radius: 10px !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.08) !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1.5 !important;
+}
+.leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Elegant Ripple Pulse badge */
+@keyframes cr-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(244, 113, 116, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(244, 113, 116, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(244, 113, 116, 0); }
+}
+.animate-pulse-red {
+  border-radius: 50%;
+  animation: cr-pulse-ring 2s infinite cubic-bezier(0.24, 1, 0.32, 1);
+}
