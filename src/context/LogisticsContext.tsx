@@ -1,15 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Vehicle, Driver, Shipment, IntermediateOpportunity, 
-  MaintenanceRecord, ExpenseRecord, SystemAlert, ScenarioParameters 
+import {
+  Vehicle, Driver, Shipment, IntermediateOpportunity,
+  MaintenanceRecord, ExpenseRecord, SystemAlert, ScenarioParameters
 } from '../types';
-import { INITIAL_VEHICLES } from '../data/vehicles';
-import { INITIAL_DRIVERS } from '../data/drivers';
-import { INITIAL_SHIPMENTS } from '../data/shipments';
-import { INITIAL_OPPORTUNITIES } from '../data/opportunities';
-import { INITIAL_MAINTENANCE } from '../data/maintenance';
-import { INITIAL_EXPENSES } from '../data/expenses';
-import { INITIAL_ALERTS } from '../data/alerts';
+import { api } from '../services/api';
 
 interface LogisticsContextType {
   vehicles: Vehicle[];
@@ -21,7 +15,9 @@ interface LogisticsContextType {
   alerts: SystemAlert[];
   unreadAlertsCount: number;
   scenarioParams: ScenarioParameters;
-  
+  isLoading: boolean;
+  loadError: string | null;
+
   // Computed Financials & KPIs
   kpis: {
     totalVehicles: number;
@@ -71,27 +67,66 @@ const DEFAULT_SCENARIO: ScenarioParameters = {
 const LogisticsContext = createContext<LogisticsContextType | undefined>(undefined);
 
 export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [vehicles, setVehicles] = useState<Vehicle[]>(INITIAL_VEHICLES);
-  const [drivers, setDrivers] = useState<Driver[]>(INITIAL_DRIVERS);
-  const [shipments, setShipments] = useState<Shipment[]>(INITIAL_SHIPMENTS);
-  const [opportunities, setOpportunities] = useState<IntermediateOpportunity[]>(INITIAL_OPPORTUNITIES);
-  const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(INITIAL_MAINTENANCE);
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES);
-  const [alerts, setAlerts] = useState<SystemAlert[]>(INITIAL_ALERTS);
+  const [vehicles, setVehicles]           = useState<Vehicle[]>([]);
+  const [drivers, setDrivers]             = useState<Driver[]>([]);
+  const [shipments, setShipments]         = useState<Shipment[]>([]);
+  const [opportunities, setOpportunities] = useState<IntermediateOpportunity[]>([]);
+  const [maintenance, setMaintenance]     = useState<MaintenanceRecord[]>([]);
+  const [expenses, setExpenses]           = useState<ExpenseRecord[]>([]);
+  const [alerts, setAlerts]               = useState<SystemAlert[]>([]);
   const [scenarioParams, setScenarioParams] = useState<ScenarioParameters>(DEFAULT_SCENARIO);
+  const [isLoading, setIsLoading]         = useState(true);
+  const [loadError, setLoadError]         = useState<string | null>(null);
 
-  // Simulated vehicle movement ticker (Frontend-only demo)
+  // ── Initial data fetch from MySQL via Express API ──────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAll() {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const [v, d, s, o, m, e, a] = await Promise.all([
+          api.vehicles.getAll(),
+          api.drivers.getAll(),
+          api.shipments.getAll(),
+          api.opportunities.getAll(),
+          api.maintenance.getAll(),
+          api.expenses.getAll(),
+          api.alerts.getAll(),
+        ]);
+        if (cancelled) return;
+        setVehicles(v);
+        setDrivers(d);
+        setShipments(s);
+        setOpportunities(o);
+        setMaintenance(m);
+        setExpenses(e);
+        setAlerts(a);
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Failed to load data from API:', err);
+          setLoadError(err.message ?? 'Could not connect to backend. Is the server running?');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadAll();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Simulated vehicle movement ticker ─────────────────────────
   useEffect(() => {
     const interval = setInterval(() => {
       setVehicles(prevVehicles =>
         prevVehicles.map(veh => {
           if (veh.status !== 'In Transit') return veh;
-          
           const latDelta = (Math.random() - 0.48) * 0.002;
           const lngDelta = (Math.random() - 0.48) * 0.002;
           const speedVariation = Math.floor(Math.random() * 7) - 3;
           const newSpeed = Math.max(45, Math.min(75, veh.currentLocation.speedKmph + speedVariation));
-
           return {
             ...veh,
             currentLocation: {
@@ -102,46 +137,44 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             },
             distanceCoveredKm: Math.min(veh.totalDistanceKm, veh.distanceCoveredKm + 0.2),
             distanceRemainingKm: Math.max(0, veh.distanceRemainingKm - 0.2),
-            lastUpdated: 'Just now (Simulated Telemetry)'
+            lastUpdated: 'Just now (Live)'
           };
         })
       );
     }, 4000);
-
     return () => clearInterval(interval);
   }, []);
 
   const unreadAlertsCount = alerts.filter(a => !a.read).length;
 
-  // Interconnected Financial & KPI Calculations based on Base Data + Scenario Modifiers
+  // ── KPI calculations ───────────────────────────────────────────
   const fuelMultiplier = scenarioParams.dieselPricePerL / 95.0;
   const rateMultiplier = scenarioParams.freightRatePerKm / 42.0;
 
-  // Base aggregate metrics
   const baseRevenue = shipments.reduce((sum, s) => sum + s.revenue, 0) + (scenarioParams.fleetSize - 8) * 32000;
   const totalRevenue = Math.round(baseRevenue * rateMultiplier * (scenarioParams.fleetUtilizationPct / 78.4));
 
-  const baseFuelCost = shipments.reduce((sum, s) => sum + s.allocatedFuelCost, 0) + (scenarioParams.fleetSize - 8) * 11500;
+  const baseFuelCost     = shipments.reduce((sum, s) => sum + s.allocatedFuelCost, 0) + (scenarioParams.fleetSize - 8) * 11500;
   const adjustedFuelCost = baseFuelCost * fuelMultiplier;
 
-  const baseDriverCost = shipments.reduce((sum, s) => sum + s.allocatedDriverCost, 0) + (scenarioParams.fleetSize - 8) * 3800;
+  const baseDriverCost     = shipments.reduce((sum, s) => sum + s.allocatedDriverCost, 0) + (scenarioParams.fleetSize - 8) * 3800;
   const adjustedDriverCost = baseDriverCost * scenarioParams.driverCostMultiplier;
 
-  const baseMaintCost = shipments.reduce((sum, s) => sum + s.allocatedMaintenanceCost, 0) + (scenarioParams.fleetSize - 8) * 3200;
+  const baseMaintCost     = shipments.reduce((sum, s) => sum + s.allocatedMaintenanceCost, 0) + (scenarioParams.fleetSize - 8) * 3200;
   const adjustedMaintCost = baseMaintCost * scenarioParams.maintenanceRateMultiplier;
 
-  const otherCosts = shipments.reduce((sum, s) => sum + s.allocatedTollCost + s.allocatedHandlingCost, 0) + (scenarioParams.fleetSize - 8) * 4100;
+  const otherCosts         = shipments.reduce((sum, s) => sum + s.allocatedTollCost + s.allocatedHandlingCost, 0) + (scenarioParams.fleetSize - 8) * 4100;
   const totalOperatingCost = Math.round(adjustedFuelCost + adjustedDriverCost + adjustedMaintCost + otherCosts);
-  const totalProfit = totalRevenue - totalOperatingCost;
-  const profitMarginPct = totalRevenue > 0 ? Number(((totalProfit / totalRevenue) * 100).toFixed(1)) : 0;
+  const totalProfit        = totalRevenue - totalOperatingCost;
+  const profitMarginPct    = totalRevenue > 0 ? Number(((totalProfit / totalRevenue) * 100).toFixed(1)) : 0;
 
-  const activeVehCount = vehicles.filter(v => v.status === 'In Transit' || v.status === 'Loading').length + Math.round((scenarioParams.fleetSize - 8) * 0.75);
-  const availableVehCount = vehicles.filter(v => v.status === 'Idle').length + Math.round((scenarioParams.fleetSize - 8) * 0.15);
+  const activeVehCount      = vehicles.filter(v => v.status === 'In Transit' || v.status === 'Loading').length + Math.round((scenarioParams.fleetSize - 8) * 0.75);
+  const availableVehCount   = vehicles.filter(v => v.status === 'Idle').length + Math.round((scenarioParams.fleetSize - 8) * 0.15);
   const maintenanceVehCount = vehicles.filter(v => v.status === 'Maintenance').length + Math.round((scenarioParams.fleetSize - 8) * 0.10);
-  const delayedVehCount = vehicles.filter(v => v.status === 'Delayed').length;
+  const delayedVehCount     = vehicles.filter(v => v.status === 'Delayed').length;
 
   const totalAvailableWeightTons = vehicles.reduce((sum, v) => sum + Math.max(0, v.maxWeightTons - v.currentWeightTons), 0);
-  const totalAvailableVolM3 = vehicles.reduce((sum, v) => sum + Math.max(0, v.maxVolumeM3 - v.currentVolumeM3), 0);
+  const totalAvailableVolM3      = vehicles.reduce((sum, v) => sum + Math.max(0, v.maxVolumeM3 - v.currentVolumeM3), 0);
 
   const kpis = {
     totalVehicles: scenarioParams.fleetSize,
@@ -162,12 +195,12 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     totalDistanceTraveledKm: 84250
   };
 
-  // CORE DIFFERENTIATING FEATURE: Accept Intermediate Shipment
+  // ── Actions ────────────────────────────────────────────────────
   const acceptIntermediateShipment = (oppId: string): boolean => {
     const opp = opportunities.find(o => o.id === oppId);
     if (!opp || opp.isAccepted) return false;
 
-    // 1. Update target vehicle load & financials
+    // Optimistic UI update
     setVehicles(prev =>
       prev.map(v => {
         if (v.id !== opp.targetVehicleId) return v;
@@ -184,7 +217,6 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })
     );
 
-    // 2. Insert new intermediate shipment
     const newShp: Shipment = {
       id: `shp-int-${Date.now()}`,
       trackingNumber: `CR-${opp.origin.substring(0, 3).toUpperCase()}-${opp.destination.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -219,13 +251,8 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       currentProgressPct: 15
     };
     setShipments(prev => [newShp, ...prev]);
+    setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, isAccepted: true } : o)));
 
-    // 3. Mark opportunity as accepted
-    setOpportunities(prev =>
-      prev.map(o => (o.id === oppId ? { ...o, isAccepted: true } : o))
-    );
-
-    // 4. Add celebration alert
     const newAlert: SystemAlert = {
       id: `alt-opp-${Date.now()}`,
       type: 'opportunity',
@@ -239,13 +266,30 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     setAlerts(prev => [newAlert, ...prev]);
 
+    // Persist to DB (fire-and-forget; optimistic UI already updated)
+    api.opportunities.accept(oppId).catch(console.error);
+    api.shipments.create(newShp).catch(console.error);
+    api.vehicles.updateLoad(opp.targetVehicleId, {
+      currentWeightTons: Math.min(
+        (vehicles.find(v => v.id === opp.targetVehicleId)?.maxWeightTons ?? 99),
+        Number(((vehicles.find(v => v.id === opp.targetVehicleId)?.currentWeightTons ?? 0) + opp.weightTons).toFixed(1))
+      ),
+      currentVolumeM3: Math.min(
+        (vehicles.find(v => v.id === opp.targetVehicleId)?.maxVolumeM3 ?? 999),
+        Number(((vehicles.find(v => v.id === opp.targetVehicleId)?.currentVolumeM3 ?? 0) + opp.volumeM3).toFixed(1))
+      ),
+      totalTripRevenue: (vehicles.find(v => v.id === opp.targetVehicleId)?.totalTripRevenue ?? 0) + opp.offeredRevenue,
+      totalTripCost: (vehicles.find(v => v.id === opp.targetVehicleId)?.totalTripCost ?? 0) + opp.totalAdditionalCost,
+    }).catch(console.error);
+    api.alerts.create({ ...newAlert }).catch(console.error);
+
     return true;
   };
 
   const createShipment = (newShipment: Partial<Shipment>) => {
-    const revenue = newShipment.revenue || 35000;
-    const totalCost = Math.round(revenue * 0.72);
-    const profit = revenue - totalCost;
+    const revenue    = newShipment.revenue || 35000;
+    const totalCost  = Math.round(revenue * 0.72);
+    const profit     = revenue - totalCost;
     const profitMargin = Number(((profit / revenue) * 100).toFixed(1));
 
     const shp: Shipment = {
@@ -280,46 +324,44 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     setShipments(prev => [shp, ...prev]);
+    api.shipments.create(shp).catch(console.error);
   };
 
   const updateVehicleStatus = (vehicleId: string, status: Vehicle['status']) => {
     setVehicles(prev => prev.map(v => v.id === vehicleId ? { ...v, status } : v));
+    api.vehicles.updateStatus(vehicleId, status).catch(console.error);
   };
 
   const updateScenarioParam = <K extends keyof ScenarioParameters>(key: K, value: ScenarioParameters[K]) => {
     setScenarioParams(prev => ({ ...prev, [key]: value }));
   };
 
-  const resetScenarioParams = () => {
-    setScenarioParams(DEFAULT_SCENARIO);
-  };
+  const resetScenarioParams = () => setScenarioParams(DEFAULT_SCENARIO);
 
   const markAlertRead = (alertId: string) => {
     setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, read: true } : a));
+    api.alerts.markRead(alertId).catch(console.error);
   };
 
   const markAllAlertsRead = () => {
     setAlerts(prev => prev.map(a => ({ ...a, read: true })));
+    api.alerts.markAllRead().catch(console.error);
   };
 
   const addExpense = (expense: Omit<ExpenseRecord, 'id'>) => {
-    const record: ExpenseRecord = {
-      ...expense,
-      id: `exp-${Date.now()}`
-    };
+    const record: ExpenseRecord = { ...expense, id: `exp-${Date.now()}` };
     setExpenses(prev => [record, ...prev]);
+    api.expenses.create(record).catch(console.error);
   };
 
   const addMaintenanceRecord = (record: Omit<MaintenanceRecord, 'id'>) => {
-    const newRecord: MaintenanceRecord = {
-      ...record,
-      id: `maint-${Date.now()}`
-    };
+    const newRecord: MaintenanceRecord = { ...record, id: `maint-${Date.now()}` };
     setMaintenance(prev => [newRecord, ...prev]);
+    api.maintenance.create(newRecord).catch(console.error);
   };
 
   const getVehicleById = (id: string) => vehicles.find(v => v.id === id || v.regNumber === id);
-  const getDriverById = (id: string) => drivers.find(d => d.id === id || d.code === id);
+  const getDriverById  = (id: string) => drivers.find(d => d.id === id || d.code === id);
 
   return (
     <LogisticsContext.Provider
@@ -333,6 +375,8 @@ export const LogisticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         alerts,
         unreadAlertsCount,
         scenarioParams,
+        isLoading,
+        loadError,
         kpis,
         acceptIntermediateShipment,
         createShipment,
